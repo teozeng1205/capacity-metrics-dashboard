@@ -32,33 +32,40 @@ An impressive, interactive Streamlit dashboard for visualizing site capacity met
 
 ## 🛠️ Setup Instructions
 
-### 1. Create Conda Environment
+### 🌐 For Streamlit Cloud Deployment (Recommended)
 
+1. **Fork/Clone this repository** to your GitHub account
+2. **Connect to Streamlit Cloud**: Go to [share.streamlit.io](https://share.streamlit.io)
+3. **Deploy**: Select your repository and `streamlit_app.py` as the main file
+4. **Automatic Setup**: Streamlit Cloud will automatically install dependencies from `requirements.txt`
+
+### 🖥️ For Local Development
+
+#### Option 1: Using the Launch Script (Easiest)
 ```bash
-# Create the environment from the provided environment.yml
+# Make the script executable (first time only)
+chmod +x launch_dashboard.sh
+
+# Run the dashboard
+./launch_dashboard.sh
+```
+
+#### Option 2: Using Conda Environment
+```bash
+# Create the environment from environment.yml
 conda env create -f environment.yml
 
 # Activate the environment
 conda activate capacity_metrics_viz
+
+# Run the Streamlit app
+streamlit run streamlit_app.py
 ```
 
-### 2. Alternative Setup (if environment.yml doesn't work)
-
+#### Option 3: Using pip
 ```bash
-# Create environment manually
-conda create -n capacity_metrics_viz python=3.10 -y
-conda activate capacity_metrics_viz
-
-# Install packages
-conda install -c conda-forge streamlit pandas numpy plotly seaborn matplotlib scikit-learn -y
-pip install streamlit-plotly-events streamlit-aggrid plotly-express
-```
-
-### 3. Run the Dashboard
-
-```bash
-# Make sure you're in the project directory
-cd capacity_metrics_visualization
+# Install dependencies
+pip install -r requirements.txt
 
 # Run the Streamlit app
 streamlit run streamlit_app.py
@@ -71,11 +78,19 @@ The dashboard will open in your browser at `http://localhost:8501`
 ```
 capacity_metrics_visualization/
 ├── data/
-│   └── site_metrics_final_20250610_to_20250623.csv
-├── environment.yml
-├── streamlit_app.py
-└── README.md
+│   └── site_metrics_final_20250610_to_20250623.csv  # Dataset
+├── streamlit_app.py           # Main dashboard application
+├── requirements.txt           # Dependencies for Streamlit Cloud & pip
+├── environment.yml           # Dependencies for conda (local development)
+├── launch_dashboard.sh       # Local development launch script
+├── .gitignore               # Git ignore rules
+└── README.md                # This documentation
 ```
+
+### 📋 Deployment Files
+- **For Streamlit Cloud**: Uses `requirements.txt` automatically
+- **For Local Development**: Use `environment.yml` (conda) or `requirements.txt` (pip)
+- **Launch Script**: `launch_dashboard.sh` for easy local setup
 
 ## 🎯 How to Use
 

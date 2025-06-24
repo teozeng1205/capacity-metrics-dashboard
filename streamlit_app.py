@@ -80,23 +80,65 @@ Each record = Provider + Site + Hour<br>
 </div>
 """, unsafe_allow_html=True)
 
-# Provider filter (independent)
-all_providers = df['providercode'].unique()
-selected_providers = st.sidebar.multiselect(
-    "Select Provider(s)", 
-    all_providers, 
-    default=all_providers,
-    help="Filter data by provider codes"
+# Smart filtering: Site-centric or Provider-centric
+st.sidebar.subheader("🎯 Smart Filtering")
+filter_mode = st.sidebar.radio(
+    "Filter Mode:",
+    ["Provider Focus", "Site Focus", "Custom"],
+    help="Choose filtering strategy: Provider Focus shows all sites for selected providers, Site Focus shows all providers for selected sites, Custom allows manual selection"
 )
 
-# Site filter (independent)
-all_sites = df['sitecode'].unique()
-selected_sites = st.sidebar.multiselect(
-    "Select Site(s)", 
-    all_sites, 
-    default=all_sites,
-    help="Filter data by site codes"
-)
+if filter_mode == "Provider Focus":
+    # Provider filter
+    providers = df['providercode'].unique()
+    selected_providers = st.sidebar.multiselect(
+        "Select Provider(s)", 
+        providers, 
+        default=[providers[0]] if len(providers) > 0 else [],
+        help="Shows ALL sites for the selected provider(s)"
+    )
+    
+    # Auto-select all sites for the selected providers
+    if selected_providers:
+        selected_sites = df[df['providercode'].isin(selected_providers)]['sitecode'].unique().tolist()
+        st.sidebar.info(f"📍 Showing all {len(selected_sites)} sites for selected provider(s)")
+    else:
+        selected_sites = []
+
+elif filter_mode == "Site Focus":
+    # Site filter first
+    sites = df['sitecode'].unique()
+    selected_sites = st.sidebar.multiselect(
+        "Select Site(s)", 
+        sites, 
+        default=[sites[0]] if len(sites) > 0 else [],
+        help="Shows ALL providers for the selected site(s)"
+    )
+    
+    # Auto-select all providers for the selected sites
+    if selected_sites:
+        selected_providers = df[df['sitecode'].isin(selected_sites)]['providercode'].unique().tolist()
+        st.sidebar.info(f"🏢 Showing all {len(selected_providers)} providers for selected site(s)")
+    else:
+        selected_providers = []
+
+else:  # Custom mode
+    # Traditional filtering
+    providers = df['providercode'].unique()
+    selected_providers = st.sidebar.multiselect(
+        "Select Provider(s)", 
+        providers, 
+        default=providers,
+        help="Filter data by provider codes"
+    )
+    
+    sites = df[df['providercode'].isin(selected_providers)]['sitecode'].unique()
+    selected_sites = st.sidebar.multiselect(
+        "Select Site(s)", 
+        sites, 
+        default=sites[:10] if len(sites) > 10 else sites,
+        help="Filter data by site codes"
+    )
 
 # Hour range filter
 hour_range = st.sidebar.slider(
@@ -119,32 +161,13 @@ selected_metric = st.sidebar.selectbox(
     help="Choose the main metric to focus on"
 )
 
-# ---------------------------------------------
-# Dynamic filtering logic
-# If only site(s) are actively filtered, show data for those site(s) across ALL providers.
-# If only provider(s) are actively filtered, show data for those provider(s) across ALL their sites.
-# Otherwise (both or none), apply both filters as selected.
-# ---------------------------------------------
-
-site_filter_active = set(selected_sites) != set(all_sites)
-provider_filter_active = set(selected_providers) != set(all_providers)
-
-# Base hour condition
-hour_condition = (df['hour'] >= hour_range[0]) & (df['hour'] <= hour_range[1])
-
-if site_filter_active and not provider_filter_active:
-    # Filter by site(s) only
-    filtered_df = df[(df['sitecode'].isin(selected_sites)) & hour_condition]
-elif provider_filter_active and not site_filter_active:
-    # Filter by provider(s) only
-    filtered_df = df[(df['providercode'].isin(selected_providers)) & hour_condition]
-else:
-    # Filter by both provider(s) and site(s) (or none if both inactive)
-    filtered_df = df[
-        (df['providercode'].isin(selected_providers)) &
-        (df['sitecode'].isin(selected_sites)) &
-        hour_condition
-    ]
+# Filter data
+filtered_df = df[
+    (df['providercode'].isin(selected_providers)) &
+    (df['sitecode'].isin(selected_sites)) &
+    (df['hour'] >= hour_range[0]) &
+    (df['hour'] <= hour_range[1])
+]
 
 # Main dashboard
 if len(filtered_df) == 0:
@@ -199,11 +222,15 @@ else:
         st.subheader("Time Series Analysis")
         
         # Explanation for Time Series tab
-        st.markdown("""
-        **📈 Time Series Analysis**: These charts show how site capacity metrics change throughout the day.
-        - **Left Chart**: Aggregated performance by provider across all hours - helps identify which providers perform better at different times
-        - **Right Chart**: Top 5 sites by average TPH - shows the highest-performing individual sites and their hourly patterns
-        - **Usage**: Look for peak performance hours, identify patterns, and spot anomalies in capacity utilization
+        st.markdown(f"""
+        **📈 Time Series Analysis ({filter_mode})**: These charts show how site capacity metrics change throughout the day.
+        
+        **Current Mode: {filter_mode}**
+        - **Provider Focus**: Left chart shows all sites for selected provider(s), Right chart breaks down individual site performance
+        - **Site Focus**: Left chart shows all providers at selected site(s), Right chart shows provider response delay comparison
+        - **Custom**: Traditional view with provider aggregation (left) and top sites analysis (right)
+        
+        **Usage**: Look for peak performance hours, identify patterns, and spot anomalies in capacity utilization based on your selected focus area.
         """)
         st.markdown("---")
         
@@ -211,64 +238,157 @@ else:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Aggregate by hour
-            hourly_data = filtered_df.groupby(['hour', 'providercode']).agg({
-                'tph_median': 'mean',
-                'ct_sum': 'sum',
-                'avg_first_resp_delay_minute': 'mean'
-            }).reset_index()
+            if filter_mode == "Site Focus":
+                # When focusing on sites, show all providers for those sites
+                hourly_data = filtered_df.groupby(['hour', 'providercode']).agg({
+                    'tph_median': 'mean',
+                    'ct_sum': 'sum',
+                    'avg_first_resp_delay_minute': 'mean'
+                }).reset_index()
+                
+                fig = px.line(
+                    hourly_data, 
+                    x='hour', 
+                    y=metric_options[selected_metric],
+                    color='providercode',
+                    title=f"All Providers at Selected Site(s) - {selected_metric}",
+                    markers=True
+                )
+                interpretation = f"""
+                **💡 Site Focus Interpretation**: Shows how different providers perform at the selected site(s) throughout the day.
+                Each line represents a different provider's performance at your selected site(s). 
+                This helps compare provider efficiency and identify which providers perform better at specific sites during different hours.
+                """
+            elif filter_mode == "Provider Focus":
+                # When focusing on providers, show all their sites
+                hourly_data = filtered_df.groupby(['hour', 'sitecode']).agg({
+                    'tph_median': 'mean',
+                    'ct_sum': 'sum',
+                    'avg_first_resp_delay_minute': 'mean'
+                }).reset_index()
+                
+                fig = px.line(
+                    hourly_data, 
+                    x='hour', 
+                    y=metric_options[selected_metric],
+                    color='sitecode',
+                    title=f"All Sites for Selected Provider(s) - {selected_metric}",
+                    markers=True
+                )
+                interpretation = f"""
+                **💡 Provider Focus Interpretation**: Shows how all sites perform for the selected provider(s) throughout the day.
+                Each line represents a different site operated by your selected provider(s). 
+                This helps identify which sites are performing best/worst and understand site-specific capacity patterns.
+                """
+            else:
+                # Custom mode - traditional view
+                hourly_data = filtered_df.groupby(['hour', 'providercode']).agg({
+                    'tph_median': 'mean',
+                    'ct_sum': 'sum',
+                    'avg_first_resp_delay_minute': 'mean'
+                }).reset_index()
+                
+                fig = px.line(
+                    hourly_data, 
+                    x='hour', 
+                    y=metric_options[selected_metric],
+                    color='providercode',
+                    title=f"Hourly {selected_metric} by Provider",
+                    markers=True
+                )
+                interpretation = """
+                **💡 Custom Mode Interpretation**: This line chart aggregates all site data by provider and hour. 
+                Each point represents the average performance across all sites for that provider during that specific hour.
+                Look for patterns like business hours peaks, off-hours performance, and provider comparisons.
+                """
             
-            fig = px.line(
-                hourly_data, 
-                x='hour', 
-                y=metric_options[selected_metric],
-                color='providercode',
-                title=f"Hourly {selected_metric} by Provider",
-                markers=True
-            )
             fig.update_layout(
                 xaxis_title="Hour of Day",
                 yaxis_title=selected_metric,
                 hovermode='x unified'
             )
             st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("""
-            **💡 Interpretation**: This line chart aggregates all site data by provider and hour. 
-            Each point represents the average performance across all sites for that provider during that specific hour.
-            Look for patterns like business hours peaks, off-hours performance, and provider comparisons.
-            """)
+            st.markdown(interpretation)
         
         with col2:
-            # Site performance over hours
-            site_hourly = filtered_df.groupby(['hour', 'sitecode']).agg({
-                'tph_median': 'mean'
-            }).reset_index()
+            if filter_mode == "Provider Focus":
+                # When focusing on providers, show site breakdown
+                site_hourly = filtered_df.groupby(['hour', 'sitecode']).agg({
+                    'tph_median': 'mean'
+                }).reset_index()
+                
+                # Show all sites for selected providers, or top 10 if too many
+                if len(selected_sites) <= 10:
+                    display_sites = selected_sites
+                    title = f"All {len(selected_sites)} Sites - TPH Performance"
+                else:
+                    top_sites = filtered_df.groupby('sitecode')['tph_median'].mean().nlargest(10).index
+                    display_sites = top_sites
+                    title = "Top 10 Sites - TPH Performance"
+                
+                display_data = site_hourly[site_hourly['sitecode'].isin(display_sites)]
+                
+                fig = px.line(
+                    display_data,
+                    x='hour',
+                    y='tph_median',
+                    color='sitecode',
+                    title=title,
+                    markers=True
+                )
+                interpretation = """
+                **💡 Provider Focus**: Shows individual site performance for your selected provider(s).
+                Each line represents one site. Compare sites to identify high/low performers and optimal capacity hours.
+                """
+            elif filter_mode == "Site Focus":
+                # When focusing on sites, show provider breakdown with additional metrics
+                provider_hourly = filtered_df.groupby(['hour', 'providercode']).agg({
+                    'avg_first_resp_delay_minute': 'mean',
+                    'ct_sum': 'sum'
+                }).reset_index()
+                
+                fig = px.line(
+                    provider_hourly,
+                    x='hour',
+                    y='avg_first_resp_delay_minute',
+                    color='providercode',
+                    title="Provider Response Delay at Selected Site(s)",
+                    markers=True
+                )
+                interpretation = """
+                **💡 Site Focus**: Shows response delay patterns for different providers at your selected site(s).
+                Each line represents one provider. Lower delays indicate better performance. Compare providers to identify efficiency differences.
+                """
+            else:
+                # Custom mode - show top sites
+                site_hourly = filtered_df.groupby(['hour', 'sitecode']).agg({
+                    'tph_median': 'mean'
+                }).reset_index()
+                
+                top_sites = filtered_df.groupby('sitecode')['tph_median'].mean().nlargest(5).index
+                top_site_data = site_hourly[site_hourly['sitecode'].isin(top_sites)]
+                
+                fig = px.line(
+                    top_site_data,
+                    x='hour',
+                    y='tph_median',
+                    color='sitecode',
+                    title="Top 5 Sites - TPH Performance Throughout the Day",
+                    markers=True
+                )
+                interpretation = """
+                **💡 Custom Mode**: Shows the 5 highest-performing sites based on average TPH.
+                Each line represents an individual site's hourly performance pattern.
+                This helps identify top sites and understand their capacity utilization throughout the day.
+                """
             
-            # Show top 5 sites by average TPH
-            top_sites = filtered_df.groupby('sitecode')['tph_median'].mean().nlargest(5).index
-            top_site_data = site_hourly[site_hourly['sitecode'].isin(top_sites)]
-            
-            fig = px.line(
-                top_site_data,
-                x='hour',
-                y='tph_median',
-                color='sitecode',
-                title="Top 5 Sites - TPH Performance Throughout the Day",
-                markers=True
-            )
             fig.update_layout(
                 xaxis_title="Hour of Day",
-                yaxis_title="TPH Median",
+                yaxis_title="TPH Median" if filter_mode != "Site Focus" else "Avg Response Delay (min)",
                 hovermode='x unified'
             )
             st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("""
-            **💡 Interpretation**: Shows the 5 highest-performing sites based on average TPH. 
-            Each line represents an individual site's hourly performance pattern. 
-            This helps identify top sites and understand their capacity utilization throughout the day.
-            """)
+            st.markdown(interpretation)
     
     with tab2:
         st.subheader("Heatmap Visualizations")

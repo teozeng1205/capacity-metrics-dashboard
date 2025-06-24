@@ -80,35 +80,23 @@ Each record = Provider + Site + Hour<br>
 </div>
 """, unsafe_allow_html=True)
 
-# Provider filter
-providers = df['providercode'].unique()
+# Provider filter – independent of site selection
+providers = sorted(df['providercode'].unique())
 selected_providers = st.sidebar.multiselect(
-    "Select Provider(s)", 
-    providers, 
+    "Select Provider(s)",
+    providers,
     default=providers,
     help="Filter data by provider codes"
 )
 
-# Site filter
-sites = df[df['providercode'].isin(selected_providers)]['sitecode'].unique()
+# Site filter – independent list so users can always pick any site code
+sites = sorted(df['sitecode'].unique())
 selected_sites = st.sidebar.multiselect(
-    "Select Site(s)", 
-    sites, 
-    default=sites[:10] if len(sites) > 10 else sites,
-    help="Filter data by site codes"
+    "Select Site(s)",
+    sites,
+    default=[],  # start with no sites selected; selecting sites will override provider filter
+    help="Filter data by site codes (selecting a site will automatically show all providers for that site)"
 )
-
-# Determine providers related to selected sites and update provider filter set
-site_related_providers = df[df['sitecode'].isin(selected_sites)]['providercode'].unique()
-# Merge with already selected providers to make sure the data is not accidentally filtered out
-effective_providers = list(set(selected_providers) | set(site_related_providers))
-
-# Display helper text showing which provider(s) correspond to selected site(s)
-if len(site_related_providers) > 0:
-    st.sidebar.markdown(
-        f"<span style='font-size: 0.9rem; color: #004d99;'>🧭 Provider(s) for chosen site(s): <strong>{', '.join(site_related_providers)}</strong></span>",
-        unsafe_allow_html=True
-    )
 
 # Hour range filter
 hour_range = st.sidebar.slider(
@@ -131,13 +119,21 @@ selected_metric = st.sidebar.selectbox(
     help="Choose the main metric to focus on"
 )
 
-# Filter data
-filtered_df = df[
-    (df['providercode'].isin(effective_providers)) &
-    (df['sitecode'].isin(selected_sites)) &
-    (df['hour'] >= hour_range[0]) &
-    (df['hour'] <= hour_range[1])
-]
+# Filter data with site selection taking precedence over provider selection
+if selected_sites:
+    # When site(s) are chosen, ignore provider filter to show all providers for those site(s)
+    filtered_df = df[
+        (df['sitecode'].isin(selected_sites)) &
+        (df['hour'] >= hour_range[0]) &
+        (df['hour'] <= hour_range[1])
+    ]
+else:
+    # If no specific site is chosen, filter by provider selection
+    filtered_df = df[
+        (df['providercode'].isin(selected_providers)) &
+        (df['hour'] >= hour_range[0]) &
+        (df['hour'] <= hour_range[1])
+    ]
 
 # Main dashboard
 if len(filtered_df) == 0:
@@ -438,10 +434,10 @@ else:
         """)
         st.markdown("---")
         
-        # Site selector
+        # Site selector – use sites present in the currently filtered data
         analysis_site = st.selectbox(
             "Select Site for Detailed Analysis",
-            selected_sites,
+            sorted(filtered_df['sitecode'].unique()),
             help="Choose a site to see detailed performance metrics"
         )
         

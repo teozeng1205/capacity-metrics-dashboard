@@ -1,0 +1,569 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
+
+# Configure Streamlit page
+st.set_page_config(
+    page_title="Site Capacity Metrics Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        font-weight: bold;
+        text-align: center;
+        color: #1f77b4;
+        margin-bottom: 2rem;
+        background: linear-gradient(90deg, #1f77b4, #ff7f0e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 10px;
+        border-left: 5px solid #1f77b4;
+    }
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #1f77b4 0%, #ff7f0e 100%);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+st.markdown('<h1 class="main-header">🚀 Site Capacity Metrics Dashboard</h1>', unsafe_allow_html=True)
+
+# Dashboard explanation
+st.markdown("""
+<div style='background-color: #f0f8ff; padding: 1rem; border-radius: 10px; margin-bottom: 2rem; border-left: 5px solid #1f77b4;'>
+    <h3 style='margin-top: 0; color: #1f77b4;'>📊 About This Dashboard</h3>
+    <p style='margin-bottom: 0;'>
+        This dashboard visualizes <strong>derived site capacity metrics</strong> aggregated by <strong>Provider → Site → Hour</strong>.
+        Each data point represents the performance characteristics of a specific site during a particular hour of the day.
+        The metrics include transaction throughput (TPH), response delays, and transaction counts to help analyze capacity patterns and performance trends.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv('data/site_metrics_final_20250610_to_20250623.csv')
+    df['last_updated'] = pd.to_datetime(df['last_updated'], errors='coerce')
+    return df
+
+# Load the data
+df = load_data()
+
+# Sidebar filters
+st.sidebar.header("🔧 Filters & Controls")
+
+# Data granularity explanation in sidebar
+st.sidebar.markdown("""
+<div style='background-color: #f0f8ff; padding: 0.5rem; border-radius: 5px; font-size: 0.9rem; margin-bottom: 1rem;'>
+<strong>📊 Data Granularity:</strong><br>
+Each record = Provider + Site + Hour<br>
+<em>Example: AI-F9-14 = Provider AI, Site F9, Hour 14</em>
+</div>
+""", unsafe_allow_html=True)
+
+# Provider filter
+providers = df['providercode'].unique()
+selected_providers = st.sidebar.multiselect(
+    "Select Provider(s)", 
+    providers, 
+    default=providers,
+    help="Filter data by provider codes"
+)
+
+# Site filter
+sites = df[df['providercode'].isin(selected_providers)]['sitecode'].unique()
+selected_sites = st.sidebar.multiselect(
+    "Select Site(s)", 
+    sites, 
+    default=sites[:10] if len(sites) > 10 else sites,
+    help="Filter data by site codes"
+)
+
+# Hour range filter
+hour_range = st.sidebar.slider(
+    "Select Hour Range",
+    min_value=0,
+    max_value=23,
+    value=(0, 23),
+    help="Filter data by hour of day"
+)
+
+# Metric selection
+metric_options = {
+    'TPH Median': 'tph_median',
+    'Count Sum': 'ct_sum',
+    'Avg Response Delay': 'avg_first_resp_delay_minute'
+}
+selected_metric = st.sidebar.selectbox(
+    "Primary Metric for Analysis",
+    list(metric_options.keys()),
+    help="Choose the main metric to focus on"
+)
+
+# Filter data
+filtered_df = df[
+    (df['providercode'].isin(selected_providers)) &
+    (df['sitecode'].isin(selected_sites)) &
+    (df['hour'] >= hour_range[0]) &
+    (df['hour'] <= hour_range[1])
+]
+
+# Main dashboard
+if len(filtered_df) == 0:
+    st.error("No data available for the selected filters. Please adjust your selection.")
+else:
+    # Key metrics row
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric(
+            label="📈 Total Sites",
+            value=len(filtered_df['sitecode'].unique()),
+            delta=f"{len(selected_providers)} providers"
+        )
+    
+    with col2:
+        avg_tph = filtered_df['tph_median'].mean()
+        st.metric(
+            label="⚡ Avg TPH",
+            value=f"{avg_tph:,.0f}",
+            delta=f"Max: {filtered_df['tph_median'].max():,.0f}"
+        )
+    
+    with col3:
+        avg_delay = filtered_df['avg_first_resp_delay_minute'].mean()
+        st.metric(
+            label="⏱️ Avg Response Delay",
+            value=f"{avg_delay:.1f} min",
+            delta=f"Min: {filtered_df['avg_first_resp_delay_minute'].min():.1f} min"
+        )
+    
+    with col4:
+        total_ct = filtered_df['ct_sum'].sum()
+        st.metric(
+            label="📊 Total Count",
+            value=f"{total_ct:,.0f}",
+            delta=f"Avg: {filtered_df['ct_sum'].mean():,.0f}"
+        )
+    
+    with col5:
+        data_points = len(filtered_df)
+        st.metric(
+            label="🔢 Data Points",
+            value=f"{data_points:,}",
+            delta=f"{len(filtered_df['hour'].unique())} hours"
+        )
+
+    # Create tabs for different views
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Time Series", "🗺️ Heatmaps", "📊 Comparisons", "🔍 Site Analysis", "📋 Data Table"])
+    
+    with tab1:
+        st.subheader("Time Series Analysis")
+        
+        # Explanation for Time Series tab
+        st.markdown("""
+        **📈 Time Series Analysis**: These charts show how site capacity metrics change throughout the day.
+        - **Left Chart**: Aggregated performance by provider across all hours - helps identify which providers perform better at different times
+        - **Right Chart**: Top 5 sites by average TPH - shows the highest-performing individual sites and their hourly patterns
+        - **Usage**: Look for peak performance hours, identify patterns, and spot anomalies in capacity utilization
+        """)
+        st.markdown("---")
+        
+        # Hourly trend for selected metric
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Aggregate by hour
+            hourly_data = filtered_df.groupby(['hour', 'providercode']).agg({
+                'tph_median': 'mean',
+                'ct_sum': 'sum',
+                'avg_first_resp_delay_minute': 'mean'
+            }).reset_index()
+            
+            fig = px.line(
+                hourly_data, 
+                x='hour', 
+                y=metric_options[selected_metric],
+                color='providercode',
+                title=f"Hourly {selected_metric} by Provider",
+                markers=True
+            )
+            fig.update_layout(
+                xaxis_title="Hour of Day",
+                yaxis_title=selected_metric,
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: This line chart aggregates all site data by provider and hour. 
+            Each point represents the average performance across all sites for that provider during that specific hour.
+            Look for patterns like business hours peaks, off-hours performance, and provider comparisons.
+            """)
+        
+        with col2:
+            # Site performance over hours
+            site_hourly = filtered_df.groupby(['hour', 'sitecode']).agg({
+                'tph_median': 'mean'
+            }).reset_index()
+            
+            # Show top 5 sites by average TPH
+            top_sites = filtered_df.groupby('sitecode')['tph_median'].mean().nlargest(5).index
+            top_site_data = site_hourly[site_hourly['sitecode'].isin(top_sites)]
+            
+            fig = px.line(
+                top_site_data,
+                x='hour',
+                y='tph_median',
+                color='sitecode',
+                title="Top 5 Sites - TPH Performance Throughout the Day",
+                markers=True
+            )
+            fig.update_layout(
+                xaxis_title="Hour of Day",
+                yaxis_title="TPH Median",
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Shows the 5 highest-performing sites based on average TPH. 
+            Each line represents an individual site's hourly performance pattern. 
+            This helps identify top sites and understand their capacity utilization throughout the day.
+            """)
+    
+    with tab2:
+        st.subheader("Heatmap Visualizations")
+        
+        # Explanation for Heatmaps tab
+        st.markdown("""
+        **🗺️ Heatmap Analysis**: Visual matrices showing performance patterns across providers/sites and time.
+        - **Left Chart**: Provider performance by hour - darker colors indicate higher values
+        - **Right Chart**: Response delay patterns for top sites - red intensity shows delay levels
+        - **Usage**: Quickly identify performance hotspots, peak hours, and problematic time periods across different dimensions
+        """)
+        st.markdown("---")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Provider vs Hour heatmap
+            pivot_data = filtered_df.pivot_table(
+                values='tph_median',
+                index='providercode',
+                columns='hour',
+                aggfunc='mean'
+            )
+            
+            fig = px.imshow(
+                pivot_data,
+                title="TPH Median - Provider vs Hour Heatmap",
+                color_continuous_scale="RdYlBu_r",
+                aspect="auto"
+            )
+            fig.update_layout(
+                xaxis_title="Hour of Day",
+                yaxis_title="Provider Code"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Each cell shows average TPH for a provider during a specific hour.
+            Darker blue colors indicate higher transaction throughput. This reveals daily patterns and peak performance times for each provider.
+            """)
+        
+        with col2:
+            # Site vs Hour heatmap (top sites only)
+            top_sites = filtered_df.groupby('sitecode')['tph_median'].mean().nlargest(10).index
+            site_data = filtered_df[filtered_df['sitecode'].isin(top_sites)]
+            
+            pivot_site = site_data.pivot_table(
+                values='avg_first_resp_delay_minute',
+                index='sitecode',
+                columns='hour',
+                aggfunc='mean'
+            )
+            
+            fig = px.imshow(
+                pivot_site,
+                title="Response Delay - Top 10 Sites vs Hour",
+                color_continuous_scale="Reds",
+                aspect="auto"
+            )
+            fig.update_layout(
+                xaxis_title="Hour of Day",
+                yaxis_title="Site Code"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Response delay heatmap for top 10 sites by TPH performance.
+            Red intensity indicates higher delays. This helps identify sites with response time issues during specific hours.
+            """)
+    
+    with tab3:
+        st.subheader("Comparative Analysis")
+        
+        # Explanation for Comparisons tab
+        st.markdown("""
+        **📊 Comparative Analysis**: Side-by-side comparisons and correlation analysis between different metrics.
+        - **Top Row**: Provider performance comparison and scatter plot showing TPH vs Response Delay correlation
+        - **Bottom Row**: Distribution analysis showing performance spread and outliers
+        - **Usage**: Compare provider performance, identify correlations between metrics, and understand performance distributions
+        """)
+        st.markdown("---")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Provider comparison
+            provider_stats = filtered_df.groupby('providercode').agg({
+                'tph_median': 'mean',
+                'ct_sum': 'sum',
+                'avg_first_resp_delay_minute': 'mean'
+            }).reset_index()
+            
+            fig = px.bar(
+                provider_stats,
+                x='providercode',
+                y='tph_median',
+                title="Average TPH by Provider",
+                color='tph_median',
+                color_continuous_scale="viridis"
+            )
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Compares average TPH performance across providers.
+            Higher bars indicate better transaction throughput capacity. Color intensity correlates with performance level.
+            """)
+        
+        with col2:
+            # TPH vs Response Delay scatter
+            fig = px.scatter(
+                filtered_df,
+                x='tph_median',
+                y='avg_first_resp_delay_minute',
+                color='providercode',
+                size='ct_sum',
+                hover_data=['sitecode', 'hour'],
+                title="TPH vs Response Delay (Bubble Size = Count Sum)",
+                opacity=0.7
+            )
+            fig.update_layout(
+                xaxis_title="TPH Median",
+                yaxis_title="Avg Response Delay (minutes)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Scatter plot showing correlation between TPH and response delay.
+            Each bubble is a site-hour data point. Bubble size represents transaction count. Look for trade-offs between throughput and response time.
+            """)
+        
+        # Performance distribution
+        st.subheader("Performance Distribution Analysis")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = px.box(
+                filtered_df,
+                x='providercode',
+                y='tph_median',
+                title="TPH Distribution by Provider"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Box plot showing TPH distribution for each provider.
+            Box shows quartiles, whiskers show range, dots are outliers. Compare median performance and variability between providers.
+            """)
+        
+        with col2:
+            fig = px.violin(
+                filtered_df,
+                x='providercode',
+                y='avg_first_resp_delay_minute',
+                title="Response Delay Distribution by Provider"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Violin plot showing response delay distribution density.
+            Width indicates frequency of values at that delay level. Wider sections = more common delay times for that provider.
+            """)
+    
+    with tab4:
+        st.subheader("Individual Site Analysis")
+        
+        # Explanation for Site Analysis tab
+        st.markdown("""
+        **🔍 Individual Site Deep Dive**: Detailed analysis of a single site's performance across all hours.
+        - **Site Metrics**: Key performance indicators for the selected site
+        - **Left Chart**: TPH performance with average line - shows hourly capacity patterns
+        - **Right Chart**: Dual-axis showing response delay and count sum relationship
+        - **Usage**: Investigate specific site issues, understand capacity patterns, and identify optimal operating hours
+        """)
+        st.markdown("---")
+        
+        # Site selector
+        analysis_site = st.selectbox(
+            "Select Site for Detailed Analysis",
+            selected_sites,
+            help="Choose a site to see detailed performance metrics"
+        )
+        
+        site_data = filtered_df[filtered_df['sitecode'] == analysis_site]
+        
+        if len(site_data) > 0:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    "🎯 Site Code",
+                    analysis_site,
+                    delta=f"Provider: {site_data['providercode'].iloc[0]}"
+                )
+            
+            with col2:
+                st.metric(
+                    "📊 Avg TPH",
+                    f"{site_data['tph_median'].mean():,.0f}",
+                    delta=f"Range: {site_data['tph_median'].min():,.0f}-{site_data['tph_median'].max():,.0f}"
+                )
+            
+            with col3:
+                st.metric(
+                    "⏱️ Avg Delay",
+                    f"{site_data['avg_first_resp_delay_minute'].mean():.1f} min",
+                    delta=f"Std: {site_data['avg_first_resp_delay_minute'].std():.1f}"
+                )
+            
+            # Site performance charts
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig = px.line(
+                    site_data,
+                    x='hour',
+                    y='tph_median',
+                    title=f"TPH Performance - Site {analysis_site}",
+                    markers=True
+                )
+                fig.add_hline(
+                    y=site_data['tph_median'].mean(),
+                    line_dash="dash",
+                    annotation_text="Average"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("""
+                **💡 Interpretation**: Hourly TPH performance for this specific site.
+                Dashed line shows the site's average. Look for peak hours, consistency, and deviation patterns.
+                """)
+            
+            with col2:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=site_data['hour'],
+                    y=site_data['avg_first_resp_delay_minute'],
+                    mode='lines+markers',
+                    name='Response Delay',
+                    line=dict(color='red')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=site_data['hour'],
+                    y=site_data['ct_sum'],
+                    mode='lines+markers',
+                    name='Count Sum',
+                    yaxis='y2',
+                    line=dict(color='blue')
+                ))
+                
+                fig.update_layout(
+                    title=f"Response Delay & Count Sum - Site {analysis_site}",
+                    xaxis_title="Hour",
+                    yaxis_title="Response Delay (min)",
+                    yaxis2=dict(
+                        title="Count Sum",
+                        overlaying='y',
+                        side='right'
+                    )
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("""
+                **💡 Interpretation**: Dual-axis chart showing response delay (red, left axis) and transaction count (blue, right axis).
+                Look for correlations: do high transaction volumes increase response delays? Identify optimal load levels.
+                """)
+        else:
+            st.warning("No data available for the selected site.")
+    
+    with tab5:
+        st.subheader("Data Explorer")
+        
+        # Explanation for Data Table tab
+        st.markdown("""
+        **📋 Data Explorer**: Raw data access and statistical summaries for the filtered dataset.
+        - **Summary Statistics**: Descriptive statistics for all numeric columns
+        - **Filtered Data**: Sortable table showing individual provider-site-hour records
+        - **Download**: Export filtered data for external analysis
+        - **Usage**: Verify specific data points, export for further analysis, and get detailed statistical insights
+        """)
+        st.markdown("---")
+        
+        # Summary statistics
+        st.write("### Summary Statistics")
+        st.dataframe(filtered_df.describe())
+        
+        # Raw data with search and sort
+        st.write("### Filtered Data")
+        st.write(f"Showing {len(filtered_df)} records")
+        
+        # Add sorting options
+        sort_col = st.selectbox("Sort by:", filtered_df.columns)
+        sort_asc = st.checkbox("Ascending", value=True)
+        
+        sorted_df = filtered_df.sort_values(sort_col, ascending=sort_asc)
+        st.dataframe(sorted_df, use_container_width=True)
+        
+        # Download button
+        csv = filtered_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Filtered Data as CSV",
+            data=csv,
+            file_name=f"filtered_site_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+
+# Footer
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: #666; padding: 20px;'>
+        <p>🚀 Site Capacity Metrics Dashboard | Built with Streamlit & Plotly</p>
+        <p>Data Period: June 10-23, 2025 | Last Updated: {}</p>
+    </div>
+    """.format(df['last_updated'].max().strftime('%Y-%m-%d %H:%M')),
+    unsafe_allow_html=True
+) 

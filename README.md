@@ -1,6 +1,14 @@
 # 🚀 Site Capacity Metrics Dashboard
 
+[![GitHub Stars](https://img.shields.io/github/stars/teozeng1205/capacity-metrics-dashboard?style=social)](https://github.com/teozeng1205/capacity-metrics-dashboard)
+[![GitHub Forks](https://img.shields.io/github/forks/teozeng1205/capacity-metrics-dashboard?style=social)](https://github.com/teozeng1205/capacity-metrics-dashboard)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/streamlit-1.46+-red.svg)](https://streamlit.io)
+
 An impressive, interactive Streamlit dashboard for visualizing site capacity metrics with advanced analytics and beautiful visualizations.
+
+🔗 **Repository**: [https://github.com/teozeng1205/capacity-metrics-dashboard](https://github.com/teozeng1205/capacity-metrics-dashboard)
 
 ## ✨ Features
 
@@ -153,13 +161,32 @@ The dashboard processes the following data columns:
 - Dynamic chart updates
 - Interactive data exploration
 
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- **Repository**: [GitHub](https://github.com/teozeng1205/capacity-metrics-dashboard)
+- **Issues**: [Report bugs or request features](https://github.com/teozeng1205/capacity-metrics-dashboard/issues)
+- **Discussions**: [Community discussions](https://github.com/teozeng1205/capacity-metrics-dashboard/discussions)
+
 ## 🤝 Support
 
 If you encounter any issues:
-1. Ensure all dependencies are properly installed
-2. Check that the data file exists in the `data/` directory
-3. Verify Python and conda versions are compatible
-4. Try recreating the conda environment
+1. Check the [Issues](https://github.com/teozeng1205/capacity-metrics-dashboard/issues) page
+2. Ensure all dependencies are properly installed
+3. Check that the data file exists in the `data/` directory
+4. Verify Python and conda versions are compatible
+5. Try recreating the conda environment
+
+## ⭐ Show Your Support
+
+If you find this project helpful, please consider giving it a ⭐ on GitHub!
 
 ---
 

@@ -98,6 +98,18 @@ selected_sites = st.sidebar.multiselect(
     help="Filter data by site codes"
 )
 
+# Determine providers related to selected sites and update provider filter set
+site_related_providers = df[df['sitecode'].isin(selected_sites)]['providercode'].unique()
+# Merge with already selected providers to make sure the data is not accidentally filtered out
+effective_providers = list(set(selected_providers) | set(site_related_providers))
+
+# Display helper text showing which provider(s) correspond to selected site(s)
+if len(site_related_providers) > 0:
+    st.sidebar.markdown(
+        f"<span style='font-size: 0.9rem; color: #004d99;'>🧭 Provider(s) for chosen site(s): <strong>{', '.join(site_related_providers)}</strong></span>",
+        unsafe_allow_html=True
+    )
+
 # Hour range filter
 hour_range = st.sidebar.slider(
     "Select Hour Range",
@@ -121,7 +133,7 @@ selected_metric = st.sidebar.selectbox(
 
 # Filter data
 filtered_df = df[
-    (df['providercode'].isin(selected_providers)) &
+    (df['providercode'].isin(effective_providers)) &
     (df['sitecode'].isin(selected_sites)) &
     (df['hour'] >= hour_range[0]) &
     (df['hour'] <= hour_range[1])

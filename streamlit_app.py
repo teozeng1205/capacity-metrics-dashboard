@@ -62,7 +62,7 @@ st.markdown("""
 @st.cache_data
 def load_data():
     df = pd.read_csv('data/site_metrics_final_20250610_to_20250623.csv')
-    df['last_updated'] = pd.to_datetime(df['last_updated'], errors='coerce')
+    df['last_updated'] = pd.to_datetime(df['last_updated'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
     return df
 
 # Load the data

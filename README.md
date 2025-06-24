@@ -2,7 +2,6 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/teozeng1205/capacity-metrics-dashboard?style=social)](https://github.com/teozeng1205/capacity-metrics-dashboard)
 [![GitHub Forks](https://img.shields.io/github/forks/teozeng1205/capacity-metrics-dashboard?style=social)](https://github.com/teozeng1205/capacity-metrics-dashboard)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.46+-red.svg)](https://streamlit.io)
 
@@ -160,14 +159,6 @@ The dashboard processes the following data columns:
 - Real-time metric calculations
 - Dynamic chart updates
 - Interactive data exploration
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 

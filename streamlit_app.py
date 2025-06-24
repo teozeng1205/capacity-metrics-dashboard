@@ -557,13 +557,14 @@ else:
         )
 
 # Footer
+last_update_str = df['last_updated'].max()
 st.markdown("---")
 st.markdown(
-    """
+    f"""
     <div style='text-align: center; color: #666; padding: 20px;'>
         <p>🚀 Site Capacity Metrics Dashboard | Built with Streamlit & Plotly</p>
-        <p>Data Period: June 10-23, 2025 | Last Updated: {}</p>
+        <p>Data Period: June 10-23, 2025 | Last Updated: {last_update_str}</p>
     </div>
-    """.format(df['last_updated'].max().strftime('%Y-%m-%d %H:%M')),
+    """,
     unsafe_allow_html=True
 ) 

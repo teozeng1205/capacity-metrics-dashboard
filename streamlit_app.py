@@ -216,7 +216,7 @@ else:
         )
 
     # Create tabs for different views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Time Series", "🗺️ Heatmaps", "📊 Comparisons", "🔍 Site Analysis", "📋 Data Table"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Time Series", "🗺️ Heatmaps", "📊 Comparisons", "🔍 Site Analysis", "🔗 Provider-Site Combinations", "📋 Data Table"])
     
     with tab1:
         st.subheader("Time Series Analysis")
@@ -659,6 +659,184 @@ else:
             st.warning("No data available for the selected site.")
     
     with tab5:
+        st.subheader("Provider-Site Combination Analysis")
+        
+        # Explanation for Provider-Site Combinations tab
+        st.markdown("""
+        **🔗 Provider-Site Combination TPH Analysis**: Comprehensive view of all unique provider-site combinations and their TPH performance.
+        - **Summary Table**: All unique provider-site combinations with aggregated TPH metrics
+        - **TPH Distribution**: Visual distribution of TPH values across all combinations
+        - **Performance Matrix**: Heatmap showing TPH performance across providers and sites
+        - **Top Performers**: Ranking of highest and lowest performing combinations
+        - **Usage**: Identify best performing provider-site pairs, compare combinations, and understand capacity distribution patterns
+        """)
+        st.markdown("---")
+        
+        # Create provider-site combination data
+        combo_data = filtered_df.groupby(['providercode', 'sitecode']).agg({
+            'tph_median': ['mean', 'min', 'max', 'std'],
+            'ct_sum': ['mean', 'sum'],
+            'avg_first_resp_delay_minute': ['mean', 'min', 'max']
+        }).round(2)
+        
+        # Flatten column names
+        combo_data.columns = ['_'.join(col).strip() for col in combo_data.columns]
+        combo_data = combo_data.reset_index()
+        
+        # Rename columns for better readability
+        combo_data.rename(columns={
+            'tph_median_mean': 'TPH_Avg',
+            'tph_median_min': 'TPH_Min',
+            'tph_median_max': 'TPH_Max',
+            'tph_median_std': 'TPH_StdDev',
+            'ct_sum_mean': 'Count_Avg',
+            'ct_sum_sum': 'Count_Total',
+            'avg_first_resp_delay_minute_mean': 'Delay_Avg',
+            'avg_first_resp_delay_minute_min': 'Delay_Min',
+            'avg_first_resp_delay_minute_max': 'Delay_Max'
+        }, inplace=True)
+        
+        # Add combination identifier
+        combo_data['Provider_Site'] = combo_data['providercode'] + '-' + combo_data['sitecode']
+        
+        # Key metrics for combinations
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                label="🔗 Total Combinations",
+                value=len(combo_data),
+                delta=f"{len(combo_data['providercode'].unique())} providers"
+            )
+        
+        with col2:
+            best_combo = combo_data.loc[combo_data['TPH_Avg'].idxmax()]
+            st.metric(
+                label="🏆 Best TPH Avg",
+                value=f"{best_combo['TPH_Avg']:,.0f}",
+                delta=best_combo['Provider_Site']
+            )
+        
+        with col3:
+            worst_combo = combo_data.loc[combo_data['TPH_Avg'].idxmin()]
+            st.metric(
+                label="⚠️ Lowest TPH Avg",
+                value=f"{worst_combo['TPH_Avg']:,.0f}",
+                delta=worst_combo['Provider_Site']
+            )
+        
+        with col4:
+            avg_tph_all = combo_data['TPH_Avg'].mean()
+            st.metric(
+                label="📊 Overall Avg TPH",
+                value=f"{avg_tph_all:,.0f}",
+                delta=f"Range: {combo_data['TPH_Avg'].std():.0f}"
+            )
+        
+        # Create visualizations
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # TPH Distribution histogram
+            fig = px.histogram(
+                combo_data,
+                x='TPH_Avg',
+                nbins=20,
+                title="TPH Distribution Across Provider-Site Combinations",
+                labels={'TPH_Avg': 'Average TPH', 'count': 'Number of Combinations'}
+            )
+            fig.update_layout(
+                xaxis_title="Average TPH",
+                yaxis_title="Number of Combinations"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Distribution of average TPH values across all provider-site combinations.
+            Shows how many combinations fall into different TPH ranges. Look for clusters and outliers.
+            """)
+        
+        with col2:
+            # Top 10 and Bottom 10 combinations
+            top_10 = combo_data.nlargest(10, 'TPH_Avg')[['Provider_Site', 'TPH_Avg']]
+            bottom_10 = combo_data.nsmallest(10, 'TPH_Avg')[['Provider_Site', 'TPH_Avg']]
+            
+            fig = go.Figure()
+            
+            # Top 10
+            fig.add_trace(go.Bar(
+                x=top_10['TPH_Avg'],
+                y=top_10['Provider_Site'],
+                orientation='h',
+                name='Top 10',
+                marker_color='green',
+                text=top_10['TPH_Avg'].round(0),
+                textposition='outside'
+            ))
+            
+            fig.update_layout(
+                title="Top 10 Provider-Site Combinations by Average TPH",
+                xaxis_title="Average TPH",
+                yaxis_title="Provider-Site Combination",
+                height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            **💡 Interpretation**: Horizontal bar chart showing the top 10 performing provider-site combinations.
+            Identify which specific combinations deliver the highest throughput.
+            """)
+        
+        # Performance Matrix Heatmap
+        st.subheader("Performance Matrix")
+        
+        # Create pivot table for heatmap
+        pivot_data = combo_data.pivot(index='providercode', columns='sitecode', values='TPH_Avg')
+        
+        fig = px.imshow(
+            pivot_data,
+            title="TPH Performance Matrix: Providers vs Sites",
+            labels=dict(x="Site Code", y="Provider Code", color="Average TPH"),
+            aspect="auto",
+            color_continuous_scale="Viridis"
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("""
+        **💡 Interpretation**: Heatmap showing TPH performance across all provider-site combinations.
+        Darker/brighter colors indicate higher TPH values. Quickly identify high-performing combinations and patterns.
+        """)
+        
+        # Detailed table
+        st.subheader("Detailed Provider-Site Combination Table")
+        
+        # Add sorting options
+        sort_options = ['TPH_Avg', 'TPH_Max', 'Count_Total', 'Delay_Avg']
+        sort_by = st.selectbox("Sort combinations by:", sort_options)
+        sort_ascending = st.checkbox("Sort ascending", value=False)
+        
+        sorted_combo_data = combo_data.sort_values(sort_by, ascending=sort_ascending)
+        
+        st.dataframe(
+            sorted_combo_data[[
+                'Provider_Site', 'providercode', 'sitecode', 
+                'TPH_Avg', 'TPH_Min', 'TPH_Max', 'TPH_StdDev',
+                'Count_Total', 'Delay_Avg'
+            ]],
+            use_container_width=True
+        )
+        
+        # Download button for combination data
+        combo_csv = sorted_combo_data.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Provider-Site Combination Data as CSV",
+            data=combo_csv,
+            file_name=f"provider_site_combinations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+
+    with tab6:
         st.subheader("Data Explorer")
         
         # Explanation for Data Table tab
